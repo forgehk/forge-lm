@@ -1,0 +1,19 @@
+[package]
+name = "forge-lm"
+version = "0.1.0"
+edition = "2021"
+description = "Dependency-free inference engine for forge-lm models"
+license = "MIT"
+
+[lib]
+name = "forgelm"
+path = "src/lib.rs"
+
+[[bin]]
+name = "forge-lm"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3

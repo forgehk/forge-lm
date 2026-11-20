@@ -1,0 +1,87 @@
+{
+  "config": {
+    "vocab_size": 512,
+    "dim": 128,
+    "n_layers": 4,
+    "n_heads": 4,
+    "hidden": 344,
+    "block_size": 128,
+    "eps": 1e-05
+  },
+  "parameters": 857216,
+  "data_bytes": 1115394,
+  "data_tokens": 550414,
+  "steps": 2500,
+  "batch": 32,
+  "lr": 0.001,
+  "seed": 0,
+  "model_bytes": 3430948,
+  "history": [
+    {
+      "step": 0,
+      "train": 6.2697,
+      "val": 6.2743,
+      "seconds": 1.3
+    },
+    {
+      "step": 250,
+      "train": 3.2032,
+      "val": 3.5239,
+      "seconds": 58.7
+    },
+    {
+      "step": 500,
+      "train": 2.7328,
+      "val": 3.0962,
+      "seconds": 121.1
+    },
+    {
+      "step": 750,
+      "train": 2.5651,
+      "val": 3.0305,
+      "seconds": 209.6
+    },
+    {
+      "step": 1000,
+      "train": 2.446,
+      "val": 3.0025,
+      "seconds": 296.9
+    },
+    {
+      "step": 1250,
+      "train": 2.3136,
+      "val": 3.0089,
+      "seconds": 354.9
+    },
+    {
+      "step": 1500,
+      "train": 2.2175,
+      "val": 3.0604,
+      "seconds": 411.6
+    },
+    {
+      "step": 1750,
+      "train": 2.1389,
+      "val": 3.0447,
+      "seconds": 469.0
+    },
+    {
+      "step": 2000,
+      "train": 2.0446,
+      "val": 3.0581,
+      "seconds": 525.7
+    },
+    {
+      "step": 2250,
+      "train": 1.9927,
+      "val": 3.0135,
+      "seconds": 581.6
+    },
+    {
+      "step": 2500,
+      "train": 1.9762,
+      "val": 3.109,
+      "seconds": 638.7
+    }
+  ]
+}

@@ -7,6 +7,40 @@
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**Status:** a training demonstration, not a usable language model. It has 857,216 parameters and learned from one megabyte of Shakespeare in a few minutes on two CPU cores. The point is the pipeline: every stage is written here and tested against the next one. [Limits](#limits) says what it cannot do.
+
+```text
+ text ──▶ tokenizer ──▶ transformer ──▶ model.flm ──▶ engine ──▶ text
+          byte-level    PyTorch,        one file:     the forward pass
+          BPE           trained from    header,       written again
+                        random weights  merges,       in Rust, with
+                                        weights       no dependencies
+                             │                             │
+                             └── same tokens, same logits ─┘
+                                 largest difference 1.2e-5
+```
+
+## Quick start
+
+**Run the released model.** Needs Rust and nothing else.
+
+```bash
+cd engine
+cargo run --release -- generate ../models/shakespeare.flm --prompt "ROMEO:" --tokens 120
+```
+
+**Train one yourself.** Needs Python 3.10 or newer and PyTorch. `data/sample.txt` is the first 150 KB of the corpus, so this runs offline. It took 74 seconds on two cores.
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e ".[dev]"
+python -m forgelm.train --data data/sample.txt --out runs/sample --steps 300
+python -m forgelm.generate runs/sample/model.flm --prompt "ROMEO:"        # PyTorch
+cd engine && cargo run --release -- generate ../runs/sample/model.flm --prompt "ROMEO:"   # Rust, same file
+```
+
+That model is worse than the released one: it saw about an eighth of the text for about an eighth of the steps, and its validation loss stops at 3.40. It is there to show the whole path, from text to tokens to weights to a second implementation, in about a minute. CI runs a shorter version of it on every push.
+
 Nothing here is downloaded pretrained. The tokenizer learns its merges from the training text, the network starts from random weights, and the model in `models/` was trained by the code in this repository in under eleven minutes on two CPU cores.
 
 ```console
@@ -50,6 +84,8 @@ The trainer writes the logits PyTorch computes for a prompt, one row per positio
 $ cargo test --release --test parity logits_match -- --nocapture
 largest difference from PyTorch over 4608 logits: 1.1570752e-5
 ```
+
+Measured with Rust 1.97 and PyTorch 2.15 on two cores of a 2.1 GHz Xeon. The test fails if any logit is off by more than 5e-4.
 
 The tokenizer is held to the same standard. A fixture of awkward inputs (empty, whitespace only, tabs and CRLF, accented Latin, Japanese, an emoji) must encode to identical ids in Python and Rust. Both sides implement the same two rules: cut text into chunks of whitespace then non-whitespace, and apply merges inside a chunk in the order they were learned.
 

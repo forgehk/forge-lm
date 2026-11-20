@@ -33,6 +33,11 @@ jobs:
           pip install -e ".[dev]"
       - name: Test
         run: pytest -q
+      - name: Train on the sample, then run the result in both implementations
+        run: |
+          python -m forgelm.train --data data/sample.txt --out runs/ci --steps 20
+          python -m forgelm.generate runs/ci/model.flm --prompt "ROMEO:"
+          cd engine && cargo run --release -- generate ../runs/ci/model.flm --prompt "ROMEO:" --tokens 40
 
   engine:
     name: cargo test (${{ matrix.os }})

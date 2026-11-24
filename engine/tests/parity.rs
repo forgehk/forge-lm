@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use forgelm::{generate, sample, Error, Model, Rng};
+use forgelm::{generate, generate_with, sample, Error, Model, Rng, Window};
 
 fn models() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../models")
@@ -158,6 +158,55 @@ fn generation_runs_past_the_context_length() {
     assert_eq!(made.len(), block * 2 + 7);
     assert_eq!(emitted, made.len());
     assert!(made.iter().all(|&t| (t as usize) < model.config.vocab_size));
+}
+
+#[test]
+fn sliding_generation_predicts_from_exactly_the_last_block_of_tokens() {
+    // PyTorch's generate feeds ids[-block_size:] for every new token. Rebuild
+    // that by hand, one fresh session per token, and sample with the same
+    // generator: the sliding engine must produce the same tokens.
+    let model = load();
+    let block = model.config.block_size;
+    let prompt = model.tokenizer.encode(b"First Citizen:\n");
+    let count = block + 40;
+    let made = generate_with(&model, &prompt, count, 0.8, 40, 5, Window::Slide, |_| {}).unwrap();
+
+    let mut history = prompt.clone();
+    let mut rng = Rng::new(5);
+    for _ in 0..count {
+        let start = history.len().saturating_sub(block);
+        let mut session = model.session();
+        let mut logits = Vec::new();
+        for &id in &history[start..] {
+            logits = session.feed(id).unwrap().to_vec();
+        }
+        history.push(sample(&logits, 0.8, 40, &mut rng));
+    }
+    assert_eq!(made, history[prompt.len()..]);
+
+    let halved = generate(&model, &prompt, count, 0.8, 40, 5, |_| {}).unwrap();
+    assert_ne!(
+        halved, made,
+        "halving the context should not match the window"
+    );
+}
+
+#[test]
+fn the_window_policy_only_matters_once_the_context_is_full() {
+    let model = load();
+    let block = model.config.block_size;
+    let prompt = model.tokenizer.encode(b"KING:\n");
+    let count = block - prompt.len();
+    let run = |window| generate_with(&model, &prompt, count, 0.8, 40, 11, window, |_| {}).unwrap();
+    assert_eq!(run(Window::Halve), run(Window::Slide));
+    assert_eq!(
+        run(Window::Halve),
+        generate(&model, &prompt, count, 0.8, 40, 11, |_| {}).unwrap()
+    );
+    let long =
+        |window| generate_with(&model, &prompt, block + 40, 0.8, 40, 11, window, |_| {}).unwrap();
+    assert_eq!(long(Window::Slide).len(), block + 40);
+    assert_eq!(long(Window::Slide), long(Window::Slide));
 }
 
 #[test]

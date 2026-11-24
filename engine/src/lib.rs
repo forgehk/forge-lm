@@ -525,6 +525,18 @@ pub fn sample(logits: &[f32], temperature: f32, top_k: usize, rng: &mut Rng) -> 
     argmax()
 }
 
+/// What generation does when the context is full.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Window {
+    /// Keep the second half of the context and re-feed it from position zero.
+    /// One refill every `block_size / 2` tokens, so generation stays fast.
+    Halve,
+    /// Drop only the oldest token and recompute the whole window for every new
+    /// token, as PyTorch's `generate` does. Exact, but each token past the
+    /// context costs a full block of work.
+    Slide,
+}
+
 /// Generate `count` tokens after `prompt`, calling `emit` with each new token.
 ///
 /// When the context fills up, the second half of it is kept and re-fed from
@@ -536,6 +548,31 @@ pub fn generate(
     temperature: f32,
     top_k: usize,
     seed: u64,
+    emit: impl FnMut(u32),
+) -> Result<Vec<u32>, Error> {
+    generate_with(
+        model,
+        prompt,
+        count,
+        temperature,
+        top_k,
+        seed,
+        Window::Halve,
+        emit,
+    )
+}
+
+/// [`generate`] with an explicit policy for a full context.
+/// `Window::Slide` reproduces PyTorch's `generate` past the block size.
+#[allow(clippy::too_many_arguments)]
+pub fn generate_with(
+    model: &Model,
+    prompt: &[u32],
+    count: usize,
+    temperature: f32,
+    top_k: usize,
+    seed: u64,
+    window: Window,
     mut emit: impl FnMut(u32),
 ) -> Result<Vec<u32>, Error> {
     let block = model.config.block_size;
@@ -560,7 +597,10 @@ pub fn generate(
         history.push(next);
         if session.position() == block {
             session.reset();
-            let keep = history.len() - block / 2;
+            let keep = match window {
+                Window::Halve => history.len() - block / 2,
+                Window::Slide => history.len() - block,
+            };
             for &token in &history[keep..history.len() - 1] {
                 session.feed(token)?;
             }

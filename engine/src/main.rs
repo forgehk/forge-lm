@@ -4,12 +4,13 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use forgelm::{generate, Model};
+use forgelm::{generate_with, Model, Window};
 
 const USAGE: &str = "usage:
   forge-lm info <model.flm>
   forge-lm encode <model.flm> <text>
-  forge-lm generate <model.flm> [--prompt TEXT] [--tokens N] [--temperature T] [--top-k K] [--seed S]";
+  forge-lm generate <model.flm> [--prompt TEXT] [--tokens N] [--temperature T] [--top-k K] [--seed S]
+                     [--window halve|slide]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -59,6 +60,7 @@ fn run(args: &[String]) -> Result<(), String> {
             let mut prompt = String::from("\n");
             let (mut tokens, mut temperature, mut top_k, mut seed) =
                 (200usize, 0.8f32, 40usize, 1u64);
+            let mut window = Window::Halve;
             let mut flags = rest.iter();
             while let Some(flag) = flags.next() {
                 let value = flags
@@ -71,6 +73,13 @@ fn run(args: &[String]) -> Result<(), String> {
                     "--temperature" => temperature = value.parse().map_err(|_| bad())?,
                     "--top-k" => top_k = value.parse().map_err(|_| bad())?,
                     "--seed" => seed = value.parse().map_err(|_| bad())?,
+                    "--window" => {
+                        window = match value.as_str() {
+                            "halve" => Window::Halve,
+                            "slide" => Window::Slide,
+                            _ => return Err(bad()),
+                        }
+                    }
                     _ => return Err(format!("unknown option {flag}\n{USAGE}")),
                 }
             }
@@ -80,11 +89,12 @@ fn run(args: &[String]) -> Result<(), String> {
             out.write_all(prompt.as_bytes())
                 .map_err(|err| err.to_string())?;
             let started = Instant::now();
-            generate(&model, &ids, tokens, temperature, top_k, seed, |token| {
+            let emit = |token| {
                 let _ = out.write_all(model.tokenizer.token_bytes(token));
                 let _ = out.flush();
-            })
-            .map_err(|err| err.to_string())?;
+            };
+            generate_with(&model, &ids, tokens, temperature, top_k, seed, window, emit)
+                .map_err(|err| err.to_string())?;
             let _ = out.write_all(b"\n");
             let seconds = started.elapsed().as_secs_f64();
             eprintln!(

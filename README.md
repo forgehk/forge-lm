@@ -86,6 +86,7 @@ Generate with the engine:
 cd engine
 cargo run --release -- info ../models/shakespeare.flm
 cargo run --release -- generate ../models/shakespeare.flm --prompt "ROMEO:" --tokens 200 --temperature 0.8 --top-k 40 --seed 1
+cargo run --release -- generate ../models/shakespeare.flm --prompt "ROMEO:" --tokens 300 --window slide
 ```
 
 Train your own:
@@ -104,7 +105,7 @@ python -m forgelm.generate runs/shakespeare/model.flm --prompt "ROMEO:"
 
 ```bash
 pytest -q                        # 45 tests: tokenizer, model, trainer, file format, the released model
-cd engine && cargo test --release    # 20 tests: arithmetic, tokenizer, parity with PyTorch, damaged files
+cd engine && cargo test --release    # 22 tests: arithmetic, tokenizer, parity with PyTorch, damaged files
 ```
 
 Some of what they check:
@@ -114,6 +115,7 @@ Some of what they check:
 - Training drives the loss below 0.3 on text small enough to memorize, so the optimizer works.
 - The model file round-trips bit for bit, and truncated, padded or corrupted files are rejected with an error instead of a panic.
 - Generation is reproducible from a seed and runs past the context length.
+- With `--window slide`, every token past the context is the one a fresh pass over the previous 128 tokens would sample.
 
 CI runs the Python suite on 3.10 and 3.12 and the engine on Linux and Windows.
 
@@ -121,7 +123,7 @@ CI runs the Python suite on 3.10 and 3.12 and the engine on Linux and Windows.
 
 - The model is tiny and its corpus is one megabyte. It is a complete, working pipeline, not a useful assistant.
 - The engine is scalar f32 on one thread. No SIMD, no batching, no quantization. It is fast only because the model is small.
-- When the context fills, the engine keeps the second half and re-feeds it from position zero. PyTorch's `generate` slides the window one token at a time, so the two sample differently past 128 tokens. Logits within one context are what the parity test covers.
+- When the context fills, the engine by default keeps the second half and re-feeds it from position zero, so it samples differently from PyTorch past 128 tokens. `--window slide` predicts every token from exactly the last 128, as PyTorch's `generate` does (a 260-token greedy run from `First Citizen:` matches PyTorch byte for byte), at about 26 tokens/s instead of 1,100, because every token past the context recomputes the whole window.
 - Training is CPU only as written.
 
 ## License
